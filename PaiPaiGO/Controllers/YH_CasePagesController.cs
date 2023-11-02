@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using X.PagedList;
 using PaiPaiGO.Models;
 using System.Reflection;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace PaiPaiGo.Controllers
 {
@@ -24,47 +25,51 @@ namespace PaiPaiGo.Controllers
             _hostingEnvironment = hostingEnvironment;
         }
 
-
 		// GET: YH_CasePages
-		public async Task<IActionResult> YH_CasePage(string sortOrder, string image, string searchString, int? page, string category)
+		public async Task<IActionResult> YH_CasePage(string searchString, int? page, int category)
 		{
-
 			//layout用
 			ViewBag.YU_ID = HttpContext.Session.GetString("MemberID");
 			ViewBag.YU_Name = HttpContext.Session.GetString("MemberName");
-			if (!string.IsNullOrEmpty(category))
+
+			// 先選擇狀態
+			var query = _context.Missions
+				.Where(m => m.MissionStatus == "發布中" && m.Category == category);
+
+			if (!String.IsNullOrEmpty(searchString))
 			{
-				page = 1; // Reset page number if category is changed
+				query = query.Where(m => m.MissionName!.Contains(searchString));
 			}
-			//搜尋框
-			if (_context.Missions == null)
-            {
-                return Problem("Entity set 'MIsson'  is null.");
-            }
-            var missions = from m in _context.Missions
-                           select m;
-            if (!String.IsNullOrEmpty(searchString))
-            {
-                missions = missions.Where(s => s.MissionName!.Contains(searchString));
-            }
-            //圖片
-            //byte[] Imgdata = null;
-            
-            //HttpContext.Session.TryGetValue(image, out Imgdata);
-            //if (Imgdata != null)
-            //{
-            //    string base64Image = Convert.ToBase64String(Imgdata);
-            //    ViewBag.mission64Image = "data:image/png;base64,"+base64Image; ;
-            //}
 
-            //return View(await missions.ToListAsync());
-            var paiPaiGoContext = _context.Missions.Include(m => m.CategoryNavigation);
+			// 分頁
+			var pageNumber = page ?? 1;
 
-            //分頁,一頁8個card
-            var pageNumber = page ?? 1;
-            return View(await missions.ToPagedListAsync(pageNumber, 8));
-        }
-        [HttpGet]
+			// 直接在查询时进行分页
+			var pagedMissions = await query.ToPagedListAsync(pageNumber, 8);
+
+			return View("YH_CasePage", pagedMissions); //指向主页面的视图名称
+		}
+
+		[HttpGet]
+		public async Task<IActionResult> GetMissionsByCategory(int category, int? page)
+		{
+			var query = _context.Missions
+				.Where(m => m.MissionStatus == "發布中" && m.Category == category);
+
+			var pageNumber = page ?? 1;
+
+			var pagedMissions = await query.ToPagedListAsync(pageNumber, 8);
+
+			return PartialView("_MissionsPartial", pagedMissions);
+		}
+
+
+
+
+
+
+
+		[HttpGet]
         public async Task<IActionResult> GetMissionImage(int id)
         {
 			//layout用
@@ -82,56 +87,43 @@ namespace PaiPaiGo.Controllers
             return File(mission.ImagePath, "image/jpeg"); // Assuming the image type is jpeg. Modify MIME type if different.
         }
 
-        [HttpGet]
 
-        public IActionResult GetMissionsByCategory(string category)
+        [HttpPost]
+        public async Task<IActionResult> GetFilterData(int? selectedCategory, string selectedStatus, string selectedZipcode, int? page)
         {
-			//layout用
-			ViewBag.YU_ID = HttpContext.Session.GetString("MemberID");
-			ViewBag.YU_Name = HttpContext.Session.GetString("MemberName");
-			var missions = _context.Missions
-                        .Where(m => m.MissionStatus == "發布中")
-                        .ToList();
-			
-			return PartialView("_MissionsPartial", missions);
+            //layout用
+            ViewBag.YU_ID = HttpContext.Session.GetString("MemberID");
+            ViewBag.YU_Name = HttpContext.Session.GetString("MemberName");
+            // 從資料庫中取得資料，預先加載相關的Category
+            var query = _context.Missions.Include(x => x.CategoryNavigation).AsQueryable();
+
+            // 過濾：根據Category
+            if (selectedCategory > 0)
+            {
+                query = query.Where(m => m.Category == selectedCategory);
+            }
+
+            // 過濾：根據Status
+            if (!string.IsNullOrEmpty(selectedStatus))
+            {
+                query = query.Where(m => m.MissionStatus == selectedStatus);
+            }
+
+            // 過濾：根據Zipcode
+            if (!string.IsNullOrEmpty(selectedZipcode))
+            {
+                query = query.Where(m => m.Postcode == selectedZipcode);
+            }
+
+            // 執行查詢和分頁
+            var filterData = await query.ToListAsync();
+            var pageNumber = page ?? 1;
+
+            // 返回PartialView結果
+            return PartialView("_MissionsPartial", await filterData.ToPagedListAsync(pageNumber, 8));
         }
-		[HttpPost]
-		public async Task<IActionResult> GetFilterData(int? selectedCategory, string selectedStatus, string selectedZipcode, int? page)
-		{
-			//layout用
-			ViewBag.YU_ID = HttpContext.Session.GetString("MemberID");
-			ViewBag.YU_Name = HttpContext.Session.GetString("MemberName");
-			// 從資料庫中取得資料，預先加載相關的Category
-			var query = _context.Missions.Include(x => x.CategoryNavigation).AsQueryable();
 
-			// 過濾：根據Category
-			if (selectedCategory> 0)
-			{
-				query = query.Where(m => m.Category == selectedCategory);
-			}
-
-			// 過濾：根據Status
-			if (!string.IsNullOrEmpty(selectedStatus))
-			{
-				query = query.Where(m => m.MissionStatus == selectedStatus);
-			}
-
-			// 過濾：根據Zipcode
-			if (!string.IsNullOrEmpty(selectedZipcode))
-			{
-				query = query.Where(m => m.Postcode == selectedZipcode);
-			}
-
-			// 執行查詢和分頁
-			var filterData = await query.ToListAsync();
-			var pageNumber = page ?? 1;
-
-			// 返回PartialView結果
-			return PartialView("_MissionsPartial", await filterData.ToPagedListAsync(pageNumber, 8));
-		}
-
-
-		[HttpPost]
+        [HttpPost]
 		public IActionResult Map(string city, string district)
 		{
 			//layout用
@@ -144,11 +136,6 @@ namespace PaiPaiGo.Controllers
 
 			return Json(new { orders = orders });
 		}
-
-
-		
-
-
 
 
 		// GET: YH_CasePages/Details/5

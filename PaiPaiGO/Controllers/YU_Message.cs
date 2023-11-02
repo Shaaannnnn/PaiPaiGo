@@ -47,7 +47,8 @@ namespace PaiPaiGO.Controllers
 				mmcontext.Abandoneds.Add(Abandoned);
 				mmcontext.SaveChanges();
 			}
-			return Json(new { success = true, message = "您好，已收到訊息，謝謝您的回饋，將盡速為您處理。" });
+			//return Json(new { success = true, message = "您好，已收到訊息，謝謝您的回饋，將盡速為您處理。" });
+			return Ok("");
 		}
 		#endregion
 

@@ -60,6 +60,14 @@ public partial class Mission
     public virtual Category CategoryNavigation { get; set; } = null!;
 
     public virtual ICollection<Opinion> Opinions { get; set; } = new List<Opinion>();
+    public string FormattedDeadline
+    {
+        get
+        {
+            DateTime combinedDateTime = DeadlineDate.Add(DeadlineTime);
+            return combinedDateTime.ToString("yyyy-MM-dd  tt HH:mm ");
+        }
+    }
 
 }
 //以下瑋珊的
